@@ -1,6 +1,6 @@
 # Codex History Recovery
 
-修复 Windows 版 Codex Desktop 左侧历史对话、项目对话显示不全的问题。
+修复 Codex Desktop 左侧历史对话、项目对话显示不全的问题。
 
 如果你遇到 Codex 历史对话“看起来丢了”，项目文件夹里的线程数量明显不对，或者普通对话只显示最近一小部分，可以把这个仓库地址发给 Codex，让它读取仓库并按这里的脚本自行排查和修复：
 
@@ -47,7 +47,7 @@ https://github.com/mazhuocheng520-crypto/codex-history-recovery
 如果我不满意，请继续迭代，直到满足要求。
 ```
 
-这段提示词不需要安装插件。Codex 只需要能读取 GitHub 仓库，并且能在你的本机运行 PowerShell 脚本。
+这段提示词不需要安装插件。Codex 只需要能读取 GitHub 仓库，并且能在你的本机运行脚本即可：Windows 使用 PowerShell，macOS 使用 bash。
 
 如果你希望以后用一句 `$codex-history-recovery` 触发固定流程，再安装仓库里的 `skill/` 目录即可。Skill 是可选项，不是运行脚本的前置条件。
 
@@ -133,6 +133,8 @@ https://github.com/mazhuocheng520-crypto/codex-history-recovery
 
 如果你想自己运行，也可以。
 
+### Windows
+
 先运行只读诊断：
 
 ```powershell
@@ -151,10 +153,44 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\repair_codex_histo
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\repair_codex_history_sidebar.ps1 -ForceRefresh
 ```
 
-脚本会生成桌面启动器：
+Windows 脚本会生成桌面启动器：
 
 ```text
 start-codex-patched-history.cmd
+```
+
+运行这个启动器时，它会关闭当前 Codex 进程、应用 pending `app.asar.patched`，再启动 patched Codex。
+
+### macOS
+
+先运行只读诊断：
+
+```bash
+bash ./scripts/repair_codex_history_sidebar_macos.sh --diagnose-only
+```
+
+准备修复包：
+
+```bash
+bash ./scripts/repair_codex_history_sidebar_macos.sh
+```
+
+如果 Codex Desktop 刚更新过，建议强制重新复制最新版本：
+
+```bash
+bash ./scripts/repair_codex_history_sidebar_macos.sh --force-refresh
+```
+
+如果脚本没有自动找到 Codex.app，可以手动指定：
+
+```bash
+bash ./scripts/repair_codex_history_sidebar_macos.sh --codex-app "/Applications/Codex.app"
+```
+
+macOS 脚本会生成桌面启动器：
+
+```text
+start-codex-patched-history.command
 ```
 
 运行这个启动器时，它会关闭当前 Codex 进程、应用 pending `app.asar.patched`，再启动 patched Codex。
@@ -180,6 +216,7 @@ skill/
   SKILL.md
   agents/openai.yaml
   scripts/repair_codex_history_sidebar.ps1
+  scripts/repair_codex_history_sidebar_macos.sh
 ```
 
 把 `skill/` 复制到：
@@ -200,7 +237,7 @@ Codex 就会按固定流程诊断、打补丁、生成启动脚本。
 
 这个工具适用于：
 
-- Windows 版 Codex Desktop
+- Windows / macOS 版 Codex Desktop
 - 本地 SQLite 里线程还在，但侧栏显示不全
 - Codex 更新后需要重新套历史侧栏补丁
 

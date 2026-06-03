@@ -1,32 +1,54 @@
 ---
 name: codex-history-recovery
-description: Restore missing Codex Desktop sidebar history and project conversations on Windows. Use when Codex history appears incomplete, project folders show too few threads, ordinary chats only show recent weeks, or a Codex app update requires rebuilding the local patched history fix.
+description: Restore missing Codex Desktop sidebar history and project conversations on Windows or macOS. Use when Codex history appears incomplete, project folders show too few threads, ordinary chats only show recent weeks, or a Codex app update requires rebuilding the local patched history fix.
 ---
 
 # Codex History Recovery
 
 ## Workflow
 
-Use this skill for the Windows Codex Desktop history/sidebar issue where local thread data still exists but the left sidebar or project groups show too few conversations.
+Use this skill for the Codex Desktop history/sidebar issue where local thread data still exists but the left sidebar or project groups show too few conversations.
 
-1. Diagnose first unless the user explicitly asks to apply the known fix:
+1. Diagnose first unless the user explicitly asks to apply the known fix.
+
+Windows:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\skills\codex-history-recovery\scripts\repair_codex_history_sidebar.ps1" -DiagnoseOnly
 ```
 
-2. Prepare or rebuild the patched Codex copy:
+macOS:
+
+```bash
+bash "$HOME/.codex/skills/codex-history-recovery/scripts/repair_codex_history_sidebar_macos.sh" --diagnose-only
+```
+
+2. Prepare or rebuild the patched Codex copy.
+
+Windows:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\skills\codex-history-recovery\scripts\repair_codex_history_sidebar.ps1"
 ```
 
-Use `-ForceRefresh` after an official Codex update so the script copies the newest installed app before patching.
+macOS:
+
+```bash
+bash "$HOME/.codex/skills/codex-history-recovery/scripts/repair_codex_history_sidebar_macos.sh"
+```
+
+Use `-ForceRefresh` on Windows or `--force-refresh` on macOS after an official Codex update so the script copies the newest installed app before patching.
 
 3. Apply the pending patch by running the generated desktop launcher. Do not close the current Codex conversation automatically unless the user explicitly agrees, because the launcher terminates Codex processes:
 
 ```powershell
 & "$env:USERPROFILE\Desktop\start-codex-patched-history.cmd"
+```
+
+macOS:
+
+```bash
+open "$HOME/Desktop/start-codex-patched-history.command"
 ```
 
 ## What The Fix Does
