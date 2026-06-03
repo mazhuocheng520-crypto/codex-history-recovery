@@ -1,0 +1,4 @@
+interface:
+  display_name: "Codex History Recovery"
+  short_description: "Restore missing Codex sidebar history after app updates."
+  default_prompt: "Use $codex-history-recovery to repair missing Codex sidebar conversations and project history."

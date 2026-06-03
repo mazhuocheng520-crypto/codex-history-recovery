@@ -1,0 +1,23 @@
+# Never publish copied or patched Codex app bundles.
+history-audit/
+patched-codex-*/
+app_asar_unpacked/
+*.asar
+*.asar.*
+
+# Never publish local Codex history/state.
+state_*.sqlite
+.codex-global-state.json
+rollout-*.jsonl
+
+# Logs and local scratch files.
+*.log
+tmp-*/
+node_modules/
+asar-tools/
+
+# OS/editor noise.
+Thumbs.db
+.DS_Store
+.vscode/
+.idea/
