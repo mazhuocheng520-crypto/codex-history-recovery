@@ -22,6 +22,35 @@ https://github.com/mazhuocheng520-crypto/codex-history-recovery
 用 $codex-history-recovery 修复 Codex 历史对话显示不全。
 ```
 
+## 推荐提示词
+
+如果你想让 Codex 更稳一点，不要一上来就直接改文件，可以把下面这段完整发给 Codex：
+
+```text
+请读取这个 GitHub 仓库：
+https://github.com/mazhuocheng520-crypto/codex-history-recovery
+
+我遇到的问题是：Codex Desktop 左侧历史对话 / 项目对话显示不全。
+
+请先和我对齐需求，确认你理解准确后再开始。
+若关键信息不足，请先提问并让我确认。
+请通过连续提问的方式和我头脑风暴，直到你对需求理解到位。
+
+确认后，请按照仓库里的 README、scripts 和 skill 进行诊断和修复：
+1. 先只读诊断，不要直接关闭 Codex。
+2. 检查本地 SQLite 历史是否还在。
+3. 判断是数据真的丢失，还是侧栏 recent thread 列表显示不全。
+4. 若符合修复条件，再准备 patched Codex。
+5. 生成补丁和桌面启动脚本后，先告诉我结果，让我确认是否重启应用。
+
+输出后继续问我是否满意。
+如果我不满意，请继续迭代，直到满足要求。
+```
+
+这段提示词不需要安装插件。Codex 只需要能读取 GitHub 仓库，并且能在你的本机运行 PowerShell 脚本。
+
+如果你希望以后用一句 `$codex-history-recovery` 触发固定流程，再安装仓库里的 `skill/` 目录即可。Skill 是可选项，不是运行脚本的前置条件。
+
 ## 典型痛点
 
 这个工具针对的是这类情况：
