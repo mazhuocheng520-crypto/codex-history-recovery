@@ -207,10 +207,28 @@ function Write-Launcher {
     param(
         [Parameter(Mandatory)][string]$PatchedExe,
         [Parameter(Mandatory)][string]$PatchedAsar,
-        [Parameter(Mandatory)][string]$PendingAsar
+        [Parameter(Mandatory)][string]$PendingAsar,
+        [string]$StateRepairScript = ''
     )
     $desktop = [Environment]::GetFolderPath('Desktop')
     $launcherNames = @('start-codex-patched-history.cmd', 'start-codex-patched-sidebar-1000.cmd')
+    $stateRepairLine = ''
+    $stateRepairBlock = ''
+    if ($StateRepairScript.Trim().Length -gt 0 -and (Test-Path -LiteralPath $StateRepairScript)) {
+        $stateRepairLine = "set ""STATE_REPAIR=$StateRepairScript"""
+        $stateRepairBlock = @"
+
+if exist "%STATE_REPAIR%" (
+  echo Repairing Codex global visible thread state...
+  powershell -NoProfile -ExecutionPolicy Bypass -File "%STATE_REPAIR%"
+  if errorlevel 1 (
+    echo Failed to repair Codex global visible thread state.
+    pause
+    exit /b 1
+  )
+)
+"@
+    }
     $content = @"
 @echo off
 setlocal
@@ -218,6 +236,7 @@ setlocal
 set "PATCHED_EXE=$PatchedExe"
 set "PATCHED_ASAR=$PatchedAsar"
 set "NEXT_ASAR=$PendingAsar"
+$stateRepairLine
 
 if not exist "%PATCHED_EXE%" (
   echo Patched Codex.exe not found:
@@ -231,6 +250,7 @@ taskkill /IM Codex.exe /F >nul 2>nul
 taskkill /IM codex.exe /F >nul 2>nul
 taskkill /IM node_repl.exe /F >nul 2>nul
 timeout /t 3 /nobreak >nul
+$stateRepairBlock
 
 if exist "%NEXT_ASAR%" (
   echo Applying pending Codex history sidebar patch...
@@ -282,7 +302,9 @@ function Invoke-Repair {
     Patch-MainAssets -AssetsDir $assets
 
     & $asarCmd pack $unpacked $pendingAsar
-    Write-Launcher -PatchedExe $patchedExe -PatchedAsar $asar -PendingAsar $pendingAsar
+    $stateRepairScript = Join-Path $PSScriptRoot 'repair_codex_global_visible_state.ps1'
+    if (-not (Test-Path -LiteralPath $stateRepairScript)) { $stateRepairScript = '' }
+    Write-Launcher -PatchedExe $patchedExe -PatchedAsar $asar -PendingAsar $pendingAsar -StateRepairScript $stateRepairScript
 
     $serverFile = Get-ChildItem -LiteralPath $assets -Filter 'app-server-manager-signals-*.js' |
         Where-Object { (Get-Content -Raw -LiteralPath $_.FullName).Contains('async runRecentConversationRefresh') } |

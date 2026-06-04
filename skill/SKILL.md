@@ -53,11 +53,12 @@ open "$HOME/Desktop/start-codex-patched-history.command"
 
 ## What The Fix Does
 
-Preserve the user's SQLite history and global state. Do not delete or rewrite:
+Preserve the user's SQLite history. Do not delete or rewrite:
 
 - `%USERPROFILE%\.codex\state_5.sqlite`
-- `%USERPROFILE%\.codex\.codex-global-state.json`
 - rollout files referenced by the SQLite rows
+
+The launcher may update `%USERPROFILE%\.codex\.codex-global-state.json` only after creating a backup, and only to add active threads that are missing from all visible sidebar buckets (`thread-project-assignments`, `projectless-thread-ids`, and `pinned-thread-ids`). Do not clear or rebuild the whole global state file.
 
 Patch only the copied Codex app bundle under:
 
@@ -73,6 +74,8 @@ this.listAllThreads({modelProviders:null,archived:!1})
 
 instead of a single paginated `listRecentThreads(...)` call. This makes project grouping receive the full active thread list before applying project assignments. Keep the stock relative time display unless the user specifically asks for exact timestamps.
 
+The Windows launcher also runs `repair_codex_global_visible_state.ps1` before starting the patched app. This repairs the narrower case where SQLite contains active threads, but the global sidebar state does not assign them to a project, ordinary chats, or pinned chats.
+
 ## Validation
 
 After preparing the patch, check for:
@@ -80,7 +83,8 @@ After preparing the patch, check for:
 - `full-refresh-patch-ok`
 - `app.asar.patched` exists under the patched app's `app\resources`
 - the generated desktop launcher points to the patched `Codex.exe`
+- the generated desktop launcher includes `Repairing Codex global visible thread state`
 
-After the user restarts through the launcher, ask them to verify that project folders and ordinary chats now show the expected historical conversations.
+After the user restarts through the launcher, ask them to verify that project folders and ordinary chats now show the expected historical conversations. If a fresh diagnosis shows higher counts than older expected numbers, use the current SQLite and global-state counts instead of stale expected numbers.
 
 If conversations are still missing after this patch, inspect whether the app-server `thread/list` method itself is omitting rows. The next escalation is a direct SQLite-backed sidebar adapter, not provider switching or config changes.
