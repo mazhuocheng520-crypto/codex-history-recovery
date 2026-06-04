@@ -234,7 +234,7 @@ timeout /t 3 /nobreak >nul
 
 if exist "%NEXT_ASAR%" (
   echo Applying pending Codex history sidebar patch...
-  powershell -NoProfile -ExecutionPolicy Bypass -Command "$asar='%PATCHED_ASAR%'; $next='%NEXT_ASAR%'; $stamp=Get-Date -Format 'yyyyMMdd-HHmmss'; Copy-Item -LiteralPath $asar -Destination ($asar + '.backup-before-history-' + $stamp) -Force; Move-Item -LiteralPath $next -Destination $asar -Force"
+  powershell -NoProfile -ExecutionPolicy Bypass -Command "`$asar='%PATCHED_ASAR%'; `$next='%NEXT_ASAR%'; `$stamp=Get-Date -Format 'yyyyMMdd-HHmmss'; Copy-Item -LiteralPath `$asar -Destination (`$asar + '.backup-before-history-' + `$stamp) -Force; Move-Item -LiteralPath `$next -Destination `$asar -Force"
   if errorlevel 1 (
     echo Failed to apply pending app.asar update.
     pause
