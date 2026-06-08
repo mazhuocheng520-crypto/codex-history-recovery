@@ -248,7 +248,6 @@ if not exist "%PATCHED_EXE%" (
 echo Closing existing Codex processes...
 taskkill /IM Codex.exe /F >nul 2>nul
 taskkill /IM codex.exe /F >nul 2>nul
-taskkill /IM node_repl.exe /F >nul 2>nul
 timeout /t 3 /nobreak >nul
 $stateRepairBlock
 
