@@ -148,17 +148,18 @@ function Patch-TextFile {
         [Parameter(Mandatory)][string]$Path,
         [Parameter(Mandatory)][scriptblock]$Patch
     )
-    $text = Get-Content -Raw -LiteralPath $Path
+    $text = [System.IO.File]::ReadAllText($Path, [System.Text.Encoding]::UTF8)
     $newText = & $Patch $text
     if ($newText -ne $text) {
-        Set-Content -LiteralPath $Path -Value $newText -Encoding UTF8 -NoNewline
+        $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+        [System.IO.File]::WriteAllText($Path, $newText, $utf8NoBom)
     }
 }
 
 function Patch-AppServerManager {
     param([Parameter(Mandatory)][string]$AssetsDir)
     $files = Get-ChildItem -LiteralPath $AssetsDir -Filter 'app-server-manager-signals-*.js'
-    $target = $files | Where-Object { (Get-Content -Raw -LiteralPath $_.FullName).Contains('async runRecentConversationRefresh') } | Select-Object -First 1
+    $target = $files | Where-Object { ([System.IO.File]::ReadAllText($_.FullName, [System.Text.Encoding]::UTF8)).Contains('async runRecentConversationRefresh') } | Select-Object -First 1
     if (-not $target) { throw "Could not find app-server-manager-signals asset." }
 
     Patch-TextFile -Path $target.FullName -Patch {
@@ -181,24 +182,24 @@ function Patch-MainAssets {
     param([Parameter(Mandatory)][string]$AssetsDir)
     $mainFiles = Get-ChildItem -LiteralPath $AssetsDir -Filter 'app-main-*.js'
     foreach ($file in $mainFiles) {
-        $raw = Get-Content -Raw -LiteralPath $file.FullName
+        $raw = [System.IO.File]::ReadAllText($file.FullName, [System.Text.Encoding]::UTF8)
         if (-not ($raw.Contains('var gT=') -or $raw.Contains('inbox-items'))) { continue }
         Patch-TextFile -Path $file.FullName -Patch {
             param($text)
             $updated = [regex]::Replace($text, 'var gT=\d+,', "var gT=$SidebarLimit,")
             $updated = [regex]::Replace($updated, 'var nT=\d+;', "var nT=$SidebarLimit;")
-            $updated = [regex]::Replace($updated, 'inbox-items`,\{limit:\d+\}', "inbox-items`,{limit:$SidebarLimit}")
+            $updated = [regex]::Replace($updated, 'inbox-items`,\{limit:\d+\}', ('inbox-items`,{limit:' + $SidebarLimit + '}'))
             return $updated
         }
     }
 
     $sidebarFiles = Get-ChildItem -LiteralPath $AssetsDir -Filter 'sidebar-thread-list-signals-*.js'
     foreach ($file in $sidebarFiles) {
-        $raw = Get-Content -Raw -LiteralPath $file.FullName
+        $raw = [System.IO.File]::ReadAllText($file.FullName, [System.Text.Encoding]::UTF8)
         if (-not $raw.Contains('inbox-items')) { continue }
         Patch-TextFile -Path $file.FullName -Patch {
             param($text)
-            return [regex]::Replace($text, 'inbox-items`,\{params:\{limit:\d+\}', "inbox-items`,{params:{limit:$SidebarLimit}")
+            return [regex]::Replace($text, 'inbox-items`,\{params:\{limit:\d+\}', ('inbox-items`,{params:{limit:' + $SidebarLimit + '}'))
         }
     }
 }
