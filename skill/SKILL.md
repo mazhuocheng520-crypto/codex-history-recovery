@@ -1,15 +1,25 @@
 ---
 name: codex-history-recovery
-description: Restore missing Codex Desktop sidebar history and project conversations on Windows or macOS. Use when Codex history appears incomplete, project folders show too few threads, ordinary chats only show recent weeks, a Codex app update requires rebuilding the local patched history fix, or history worked once but disappeared again after restart.
+description: 修复 Codex Desktop 历史对话丢失、项目对话显示不全、普通对话只剩最近记录、更新后补丁失效，或修好后重启又打开官方版入口的问题。Windows/macOS 均可用。
 ---
 
-# Codex History Recovery
+# Codex 历史对话恢复
 
-## Workflow
+## 使用场景
 
-Use this skill for the Codex Desktop history/sidebar issue where local thread data still exists but the left sidebar or project groups show too few conversations.
+当 Codex Desktop 本地线程数据还在，但左侧普通对话或项目文件夹显示不全时，使用这个 Skill。
 
-1. Diagnose first unless the user explicitly asks to apply the known fix.
+典型情况：
+
+- 历史对话看起来丢了
+- 项目文件夹里的线程数量少于实际数量
+- 普通对话只剩最近几天或几周
+- Codex 更新后补丁失效
+- 修好后重启又变回去，因为启动到了官方版 Codex
+
+## 使用流程
+
+1. 先做只读诊断，除非用户明确要求直接应用已知修复。
 
 Windows:
 
@@ -23,7 +33,7 @@ macOS:
 bash "$HOME/.codex/skills/codex-history-recovery/scripts/repair_codex_history_sidebar_macos.sh" --diagnose-only
 ```
 
-2. Prepare or rebuild the patched Codex copy.
+2. 准备或重建 patched Codex。
 
 Windows:
 
@@ -37,9 +47,11 @@ macOS:
 bash "$HOME/.codex/skills/codex-history-recovery/scripts/repair_codex_history_sidebar_macos.sh"
 ```
 
-Use `-ForceRefresh` on Windows or `--force-refresh` on macOS after an official Codex update so the script copies the newest installed app before patching.
+Codex 官方应用更新后，Windows 使用 `-ForceRefresh`，macOS 使用 `--force-refresh`，强制复制最新安装包后重新打补丁。
 
-3. Apply the pending patch by running the generated desktop launcher. Do not close the current Codex conversation automatically unless the user explicitly agrees, because the launcher terminates Codex processes:
+3. 应用补丁时运行生成的桌面启动器。不要在用户未确认前主动关闭当前 Codex，因为启动器会结束 Codex 进程。
+
+Windows:
 
 ```powershell
 & "$env:USERPROFILE\Desktop\start-codex-patched-history.cmd"
@@ -51,55 +63,75 @@ macOS:
 open "$HOME/Desktop/start-codex-patched-history.command"
 ```
 
-If the user says the fix worked but disappeared again after restarting Codex, inspect the running process path before rebuilding. On Windows, an official app path usually starts with:
+## 重启后又失效
+
+如果用户说“刚才修好了，重启后又没了”，先检查当前运行路径，不要急着重建补丁。
+
+Windows 官方版路径通常是：
 
 ```text
 C:\Program Files\WindowsApps\OpenAI.Codex_<version>_x64__...
 ```
 
-A patched app path should be under:
+patched 版路径应该在：
 
 ```text
 %USERPROFILE%\Documents\Codex\history-audit\patched-codex-<version>
 ```
 
-If the process is official, explain that the user restarted through the original desktop shortcut, Start Menu item, taskbar pinned icon, or tray entry. Re-run or point them to the generated launcher instead of rebuilding from scratch. On Windows, the script creates `Codex 历史修复版.lnk`; if the user wants the default `Codex` desktop and Start Menu shortcuts redirected to the repair launcher, run the Windows script with `-PromoteLauncherShortcuts` after confirming that this shortcut change is acceptable.
+如果当前进程是官方版，说明用户从原桌面快捷方式、开始菜单、任务栏固定图标或托盘入口打开了官方 Codex。直接让用户改用生成的启动器，不要从头排查数据库。
 
-## What The Fix Does
+Windows 脚本会生成：
 
-Preserve the user's SQLite history. Do not delete or rewrite:
+```text
+Codex 历史修复版.lnk
+```
+
+如果用户希望桌面和开始菜单里的默认 `Codex` 也指向修复启动器，在确认后运行：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\skills\codex-history-recovery\scripts\repair_codex_history_sidebar.ps1" -PromoteLauncherShortcuts
+```
+
+## 修复内容
+
+保留用户 SQLite 历史。不要删除或重写：
 
 - `%USERPROFILE%\.codex\state_5.sqlite`
-- rollout files referenced by the SQLite rows
+- SQLite 行引用的 rollout 文件
 
-The launcher may update `%USERPROFILE%\.codex\.codex-global-state.json` only after creating a backup, and only to add active threads that are missing from all visible sidebar buckets (`thread-project-assignments`, `projectless-thread-ids`, and `pinned-thread-ids`). Do not clear or rebuild the whole global state file.
+启动器可以在备份后更新：
 
-Patch only the copied Codex app bundle under:
+```text
+%USERPROFILE%\.codex\.codex-global-state.json
+```
+
+只补齐缺失的可见侧栏归属：`thread-project-assignments`、`projectless-thread-ids`、`pinned-thread-ids`。不要清空或重建整个全局状态文件。
+
+只修改复制出来的 Codex 应用包：
 
 ```text
 %USERPROFILE%\Documents\Codex\history-audit\patched-codex-<version>
 ```
 
-The core frontend patch changes `runRecentConversationRefresh` so the sidebar refresh uses:
+核心前端补丁是把 `runRecentConversationRefresh` 改成使用：
 
 ```js
 this.listAllThreads({modelProviders:null,archived:!1})
 ```
 
-instead of a single paginated `listRecentThreads(...)` call. This makes project grouping receive the full active thread list before applying project assignments. Keep the stock relative time display unless the user specifically asks for exact timestamps.
+代替单页 `listRecentThreads(...)`。这样项目分组能拿到完整 active thread 列表。
 
-The Windows launcher also runs `repair_codex_global_visible_state.ps1` before starting the patched app. This repairs the narrower case where SQLite contains active threads, but the global sidebar state does not assign them to a project, ordinary chats, or pinned chats.
+## 验证点
 
-## Validation
+准备补丁后检查：
 
-After preparing the patch, check for:
+- 输出包含 `full-refresh-patch-ok`
+- patched app 的 `app\resources` 下存在 `app.asar.patched`
+- 桌面启动器指向 patched `Codex.exe`
+- 桌面启动器包含 `Repairing Codex global visible thread state`
+- Windows 上存在 `Codex 历史修复版.lnk`
 
-- `full-refresh-patch-ok`
-- `app.asar.patched` exists under the patched app's `app\resources`
-- the generated desktop launcher points to the patched `Codex.exe`
-- the generated desktop launcher includes `Repairing Codex global visible thread state`
-- Windows: `Codex 历史修复版.lnk` exists on the desktop or Start Menu when shortcut creation is available
+用户通过启动器重启后，再确认项目文件夹和普通对话是否显示完整历史。
 
-After the user restarts through the launcher, ask them to verify that project folders and ordinary chats now show the expected historical conversations. If a fresh diagnosis shows higher counts than older expected numbers, use the current SQLite and global-state counts instead of stale expected numbers.
-
-If conversations are still missing after this patch, inspect whether the app-server `thread/list` method itself is omitting rows. The next escalation is a direct SQLite-backed sidebar adapter, not provider switching or config changes.
+如果补丁后仍然少，再检查 app-server 的 `thread/list` 是否本身遗漏旧 thread。下一步是 SQLite-backed sidebar adapter，不是 provider 切换或配置修改。
