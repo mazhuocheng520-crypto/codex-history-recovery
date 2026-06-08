@@ -63,10 +63,38 @@ https://github.com/mazhuocheng520-crypto/codex-desktop-history-recovery
 - 本地数据库里还有旧会话，但项目组里看不到
 - SQLite 里有未归档线程，但它既不在项目映射、普通对话列表，也不在置顶列表
 - Codex 更新后，之前修好的历史侧栏又失效
+- 重启 Codex 后又变回“少历史”的状态，因为点到了官方版快捷方式、开始菜单或任务栏固定图标
 - 置顶区、项目区、普通对话区的显示关系变乱
 - 英文搜索里常见的 `Codex Desktop missing chat history`、`project conversations disappeared`、`No chats`、`sidebar hides older conversations`、`recent-50 window`、`state_5.sqlite local data intact`
 
 这个问题最折磨人的地方是：UI 看起来像历史丢了，但实际上数据可能还在。
+
+## 重启后又变回去了怎么办
+
+如果刚修好时能看到历史，重新启动 Codex 后又变回“只显示一部分”，优先检查是不是启动到了官方版，而不是 patched 版。
+
+在 Windows 上，官方版进程路径通常长这样：
+
+```text
+C:\Program Files\WindowsApps\OpenAI.Codex_<version>_x64__...\app\Codex.exe
+```
+
+patched 版进程路径应该长这样：
+
+```text
+%USERPROFILE%\Documents\Codex\history-audit\patched-codex-<version>\app\Codex.exe
+```
+
+这个坑很常见：补丁包还在，历史数据也还在，但用户从桌面原来的 `Codex.lnk`、开始菜单、任务栏固定图标或托盘重新打开了官方版。官方版没有侧栏全量历史补丁，所以看起来像“又丢了”。
+
+推荐做法：
+
+1. 运行生成的 `start-codex-patched-history.cmd`
+2. 使用脚本自动生成的 `Codex 历史修复版` 快捷方式
+3. 如果你经常点原来的 `Codex` 图标，Windows 可加 `-PromoteLauncherShortcuts`，脚本会先备份官方快捷方式，再把桌面和开始菜单里的 `Codex` 指向修复启动器
+4. 如果任务栏固定图标仍然打开官方版，取消固定旧图标，再从 `Codex 历史修复版` 重新固定
+
+这不是历史再次丢失，而是启动入口绕过了补丁。
 
 ## 搜索关键词
 
@@ -180,13 +208,21 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\repair_codex_histo
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\repair_codex_history_sidebar.ps1 -ForceRefresh
 ```
 
+如果修好后重启又变回去，通常是点到了官方快捷方式。可以让脚本生成醒目的补丁版快捷方式，并可选择把桌面/开始菜单的默认 `Codex` 快捷方式改成修复启动器：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\repair_codex_history_sidebar.ps1 -PromoteLauncherShortcuts
+```
+
+使用 `-PromoteLauncherShortcuts` 时，脚本会先备份原快捷方式，再改入口；不会删除官方 Codex 应用。
+
 Windows 脚本会生成桌面启动器：
 
 ```text
 start-codex-patched-history.cmd
 ```
 
-运行这个启动器时，它会关闭当前 Codex 进程、应用 pending `app.asar.patched`，再启动 patched Codex。
+运行这个启动器时，它会关闭当前 Codex 进程、修复全局可见会话分区、应用 pending `app.asar.patched`，再启动 patched Codex。
 
 ### macOS
 

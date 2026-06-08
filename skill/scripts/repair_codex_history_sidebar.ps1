@@ -6,7 +6,8 @@ param(
     [int]$RecentPageCount = 20,
     [switch]$DiagnoseOnly,
     [switch]$ForceRefresh,
-    [switch]$ApplyNow
+    [switch]$ApplyNow,
+    [switch]$PromoteLauncherShortcuts
 )
 
 Set-StrictMode -Version Latest
@@ -204,12 +205,59 @@ function Patch-MainAssets {
     }
 }
 
+function Write-Shortcut {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][string]$LauncherPath,
+        [Parameter(Mandatory)][string]$PatchedExe,
+        [string]$BackupPath = ''
+    )
+    if ($BackupPath.Trim().Length -gt 0 -and (Test-Path -LiteralPath $Path) -and -not (Test-Path -LiteralPath $BackupPath)) {
+        Copy-Item -LiteralPath $Path -Destination $BackupPath -Force
+        Write-Host "Existing shortcut backed up: $BackupPath"
+    }
+
+    $shell = New-Object -ComObject WScript.Shell
+    $shortcut = $shell.CreateShortcut($Path)
+    $shortcut.TargetPath = $LauncherPath
+    $shortcut.WorkingDirectory = [Environment]::GetFolderPath('Desktop')
+    if (Test-Path -LiteralPath $PatchedExe) {
+        $shortcut.IconLocation = "$PatchedExe,0"
+    }
+    $shortcut.Description = 'Start patched Codex with history/sidebar recovery'
+    $shortcut.Save()
+    Write-Host "Shortcut written: $Path"
+}
+
+function Write-LauncherShortcuts {
+    param(
+        [Parameter(Mandatory)][string]$LauncherPath,
+        [Parameter(Mandatory)][string]$PatchedExe,
+        [bool]$PromoteDefault = $false
+    )
+    try {
+        $desktop = [Environment]::GetFolderPath('Desktop')
+        $startMenu = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs'
+
+        Write-Shortcut -Path (Join-Path $desktop 'Codex 历史修复版.lnk') -LauncherPath $LauncherPath -PatchedExe $PatchedExe
+        Write-Shortcut -Path (Join-Path $startMenu 'Codex 历史修复版.lnk') -LauncherPath $LauncherPath -PatchedExe $PatchedExe
+
+        if ($PromoteDefault) {
+            Write-Shortcut -Path (Join-Path $desktop 'Codex.lnk') -LauncherPath $LauncherPath -PatchedExe $PatchedExe -BackupPath (Join-Path $desktop 'Codex 官方版.lnk')
+            Write-Shortcut -Path (Join-Path $startMenu 'Codex.lnk') -LauncherPath $LauncherPath -PatchedExe $PatchedExe -BackupPath (Join-Path $startMenu 'Codex 官方版.lnk')
+        }
+    } catch {
+        Write-Host "Shortcut creation skipped: $($_.Exception.Message)"
+    }
+}
+
 function Write-Launcher {
     param(
         [Parameter(Mandatory)][string]$PatchedExe,
         [Parameter(Mandatory)][string]$PatchedAsar,
         [Parameter(Mandatory)][string]$PendingAsar,
-        [string]$StateRepairScript = ''
+        [string]$StateRepairScript = '',
+        [bool]$PromoteDefaultShortcuts = $false
     )
     $desktop = [Environment]::GetFolderPath('Desktop')
     $launcherNames = @('start-codex-patched-history.cmd', 'start-codex-patched-sidebar-1000.cmd')
@@ -271,6 +319,7 @@ exit /b 0
         Set-Content -LiteralPath $path -Value $content -Encoding ASCII
         Write-Host "Launcher written: $path"
     }
+    Write-LauncherShortcuts -LauncherPath (Join-Path $desktop 'start-codex-patched-history.cmd') -PatchedExe $PatchedExe -PromoteDefault $PromoteDefaultShortcuts
 }
 
 function Invoke-Repair {
@@ -304,7 +353,7 @@ function Invoke-Repair {
     & $asarCmd pack $unpacked $pendingAsar
     $stateRepairScript = Join-Path $PSScriptRoot 'repair_codex_global_visible_state.ps1'
     if (-not (Test-Path -LiteralPath $stateRepairScript)) { $stateRepairScript = '' }
-    Write-Launcher -PatchedExe $patchedExe -PatchedAsar $asar -PendingAsar $pendingAsar -StateRepairScript $stateRepairScript
+    Write-Launcher -PatchedExe $patchedExe -PatchedAsar $asar -PendingAsar $pendingAsar -StateRepairScript $stateRepairScript -PromoteDefaultShortcuts $PromoteLauncherShortcuts
 
     $serverFile = Get-ChildItem -LiteralPath $assets -Filter 'app-server-manager-signals-*.js' |
         Where-Object { (Get-Content -Raw -LiteralPath $_.FullName).Contains('async runRecentConversationRefresh') } |

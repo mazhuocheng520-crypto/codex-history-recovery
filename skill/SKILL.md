@@ -1,6 +1,6 @@
 ---
 name: codex-history-recovery
-description: Restore missing Codex Desktop sidebar history and project conversations on Windows or macOS. Use when Codex history appears incomplete, project folders show too few threads, ordinary chats only show recent weeks, or a Codex app update requires rebuilding the local patched history fix.
+description: Restore missing Codex Desktop sidebar history and project conversations on Windows or macOS. Use when Codex history appears incomplete, project folders show too few threads, ordinary chats only show recent weeks, a Codex app update requires rebuilding the local patched history fix, or history worked once but disappeared again after restart.
 ---
 
 # Codex History Recovery
@@ -51,6 +51,20 @@ macOS:
 open "$HOME/Desktop/start-codex-patched-history.command"
 ```
 
+If the user says the fix worked but disappeared again after restarting Codex, inspect the running process path before rebuilding. On Windows, an official app path usually starts with:
+
+```text
+C:\Program Files\WindowsApps\OpenAI.Codex_<version>_x64__...
+```
+
+A patched app path should be under:
+
+```text
+%USERPROFILE%\Documents\Codex\history-audit\patched-codex-<version>
+```
+
+If the process is official, explain that the user restarted through the original desktop shortcut, Start Menu item, taskbar pinned icon, or tray entry. Re-run or point them to the generated launcher instead of rebuilding from scratch. On Windows, the script creates `Codex 历史修复版.lnk`; if the user wants the default `Codex` desktop and Start Menu shortcuts redirected to the repair launcher, run the Windows script with `-PromoteLauncherShortcuts` after confirming that this shortcut change is acceptable.
+
 ## What The Fix Does
 
 Preserve the user's SQLite history. Do not delete or rewrite:
@@ -84,6 +98,7 @@ After preparing the patch, check for:
 - `app.asar.patched` exists under the patched app's `app\resources`
 - the generated desktop launcher points to the patched `Codex.exe`
 - the generated desktop launcher includes `Repairing Codex global visible thread state`
+- Windows: `Codex 历史修复版.lnk` exists on the desktop or Start Menu when shortcut creation is available
 
 After the user restarts through the launcher, ask them to verify that project folders and ordinary chats now show the expected historical conversations. If a fresh diagnosis shows higher counts than older expected numbers, use the current SQLite and global-state counts instead of stale expected numbers.
 

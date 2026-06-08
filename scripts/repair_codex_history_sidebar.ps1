@@ -6,7 +6,8 @@ param(
     [int]$RecentPageCount = 20,
     [switch]$DiagnoseOnly,
     [switch]$ForceRefresh,
-    [switch]$ApplyNow
+    [switch]$ApplyNow,
+    [switch]$PromoteLauncherShortcuts
 )
 
 Set-StrictMode -Version Latest
@@ -148,17 +149,18 @@ function Patch-TextFile {
         [Parameter(Mandatory)][string]$Path,
         [Parameter(Mandatory)][scriptblock]$Patch
     )
-    $text = Get-Content -Raw -LiteralPath $Path
+    $text = [System.IO.File]::ReadAllText($Path, [System.Text.Encoding]::UTF8)
     $newText = & $Patch $text
     if ($newText -ne $text) {
-        Set-Content -LiteralPath $Path -Value $newText -Encoding UTF8 -NoNewline
+        $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+        [System.IO.File]::WriteAllText($Path, $newText, $utf8NoBom)
     }
 }
 
 function Patch-AppServerManager {
     param([Parameter(Mandatory)][string]$AssetsDir)
     $files = Get-ChildItem -LiteralPath $AssetsDir -Filter 'app-server-manager-signals-*.js'
-    $target = $files | Where-Object { (Get-Content -Raw -LiteralPath $_.FullName).Contains('async runRecentConversationRefresh') } | Select-Object -First 1
+    $target = $files | Where-Object { ([System.IO.File]::ReadAllText($_.FullName, [System.Text.Encoding]::UTF8)).Contains('async runRecentConversationRefresh') } | Select-Object -First 1
     if (-not $target) { throw "Could not find app-server-manager-signals asset." }
 
     Patch-TextFile -Path $target.FullName -Patch {
@@ -181,25 +183,71 @@ function Patch-MainAssets {
     param([Parameter(Mandatory)][string]$AssetsDir)
     $mainFiles = Get-ChildItem -LiteralPath $AssetsDir -Filter 'app-main-*.js'
     foreach ($file in $mainFiles) {
-        $raw = Get-Content -Raw -LiteralPath $file.FullName
+        $raw = [System.IO.File]::ReadAllText($file.FullName, [System.Text.Encoding]::UTF8)
         if (-not ($raw.Contains('var gT=') -or $raw.Contains('inbox-items'))) { continue }
         Patch-TextFile -Path $file.FullName -Patch {
             param($text)
             $updated = [regex]::Replace($text, 'var gT=\d+,', "var gT=$SidebarLimit,")
             $updated = [regex]::Replace($updated, 'var nT=\d+;', "var nT=$SidebarLimit;")
-            $updated = [regex]::Replace($updated, 'inbox-items`,\{limit:\d+\}', "inbox-items`,{limit:$SidebarLimit}")
+            $updated = [regex]::Replace($updated, 'inbox-items`,\{limit:\d+\}', ('inbox-items`,{limit:' + $SidebarLimit + '}'))
             return $updated
         }
     }
 
     $sidebarFiles = Get-ChildItem -LiteralPath $AssetsDir -Filter 'sidebar-thread-list-signals-*.js'
     foreach ($file in $sidebarFiles) {
-        $raw = Get-Content -Raw -LiteralPath $file.FullName
+        $raw = [System.IO.File]::ReadAllText($file.FullName, [System.Text.Encoding]::UTF8)
         if (-not $raw.Contains('inbox-items')) { continue }
         Patch-TextFile -Path $file.FullName -Patch {
             param($text)
-            return [regex]::Replace($text, 'inbox-items`,\{params:\{limit:\d+\}', "inbox-items`,{params:{limit:$SidebarLimit}")
+            return [regex]::Replace($text, 'inbox-items`,\{params:\{limit:\d+\}', ('inbox-items`,{params:{limit:' + $SidebarLimit + '}'))
         }
+    }
+}
+
+function Write-Shortcut {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][string]$LauncherPath,
+        [Parameter(Mandatory)][string]$PatchedExe,
+        [string]$BackupPath = ''
+    )
+    if ($BackupPath.Trim().Length -gt 0 -and (Test-Path -LiteralPath $Path) -and -not (Test-Path -LiteralPath $BackupPath)) {
+        Copy-Item -LiteralPath $Path -Destination $BackupPath -Force
+        Write-Host "Existing shortcut backed up: $BackupPath"
+    }
+
+    $shell = New-Object -ComObject WScript.Shell
+    $shortcut = $shell.CreateShortcut($Path)
+    $shortcut.TargetPath = $LauncherPath
+    $shortcut.WorkingDirectory = [Environment]::GetFolderPath('Desktop')
+    if (Test-Path -LiteralPath $PatchedExe) {
+        $shortcut.IconLocation = "$PatchedExe,0"
+    }
+    $shortcut.Description = 'Start patched Codex with history/sidebar recovery'
+    $shortcut.Save()
+    Write-Host "Shortcut written: $Path"
+}
+
+function Write-LauncherShortcuts {
+    param(
+        [Parameter(Mandatory)][string]$LauncherPath,
+        [Parameter(Mandatory)][string]$PatchedExe,
+        [bool]$PromoteDefault = $false
+    )
+    try {
+        $desktop = [Environment]::GetFolderPath('Desktop')
+        $startMenu = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs'
+
+        Write-Shortcut -Path (Join-Path $desktop 'Codex 历史修复版.lnk') -LauncherPath $LauncherPath -PatchedExe $PatchedExe
+        Write-Shortcut -Path (Join-Path $startMenu 'Codex 历史修复版.lnk') -LauncherPath $LauncherPath -PatchedExe $PatchedExe
+
+        if ($PromoteDefault) {
+            Write-Shortcut -Path (Join-Path $desktop 'Codex.lnk') -LauncherPath $LauncherPath -PatchedExe $PatchedExe -BackupPath (Join-Path $desktop 'Codex 官方版.lnk')
+            Write-Shortcut -Path (Join-Path $startMenu 'Codex.lnk') -LauncherPath $LauncherPath -PatchedExe $PatchedExe -BackupPath (Join-Path $startMenu 'Codex 官方版.lnk')
+        }
+    } catch {
+        Write-Host "Shortcut creation skipped: $($_.Exception.Message)"
     }
 }
 
@@ -208,7 +256,8 @@ function Write-Launcher {
         [Parameter(Mandatory)][string]$PatchedExe,
         [Parameter(Mandatory)][string]$PatchedAsar,
         [Parameter(Mandatory)][string]$PendingAsar,
-        [string]$StateRepairScript = ''
+        [string]$StateRepairScript = '',
+        [bool]$PromoteDefaultShortcuts = $false
     )
     $desktop = [Environment]::GetFolderPath('Desktop')
     $launcherNames = @('start-codex-patched-history.cmd', 'start-codex-patched-sidebar-1000.cmd')
@@ -248,7 +297,6 @@ if not exist "%PATCHED_EXE%" (
 echo Closing existing Codex processes...
 taskkill /IM Codex.exe /F >nul 2>nul
 taskkill /IM codex.exe /F >nul 2>nul
-taskkill /IM node_repl.exe /F >nul 2>nul
 timeout /t 3 /nobreak >nul
 $stateRepairBlock
 
@@ -271,6 +319,7 @@ exit /b 0
         Set-Content -LiteralPath $path -Value $content -Encoding ASCII
         Write-Host "Launcher written: $path"
     }
+    Write-LauncherShortcuts -LauncherPath (Join-Path $desktop 'start-codex-patched-history.cmd') -PatchedExe $PatchedExe -PromoteDefault $PromoteDefaultShortcuts
 }
 
 function Invoke-Repair {
@@ -304,7 +353,7 @@ function Invoke-Repair {
     & $asarCmd pack $unpacked $pendingAsar
     $stateRepairScript = Join-Path $PSScriptRoot 'repair_codex_global_visible_state.ps1'
     if (-not (Test-Path -LiteralPath $stateRepairScript)) { $stateRepairScript = '' }
-    Write-Launcher -PatchedExe $patchedExe -PatchedAsar $asar -PendingAsar $pendingAsar -StateRepairScript $stateRepairScript
+    Write-Launcher -PatchedExe $patchedExe -PatchedAsar $asar -PendingAsar $pendingAsar -StateRepairScript $stateRepairScript -PromoteDefaultShortcuts $PromoteLauncherShortcuts
 
     $serverFile = Get-ChildItem -LiteralPath $assets -Filter 'app-server-manager-signals-*.js' |
         Where-Object { (Get-Content -Raw -LiteralPath $_.FullName).Contains('async runRecentConversationRefresh') } |
