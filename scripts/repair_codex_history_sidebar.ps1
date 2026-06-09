@@ -220,7 +220,7 @@ function Write-Shortcut {
     $shell = New-Object -ComObject WScript.Shell
     $shortcut = $shell.CreateShortcut($Path)
     $shortcut.TargetPath = $LauncherPath
-    $shortcut.WorkingDirectory = [Environment]::GetFolderPath('Desktop')
+    $shortcut.WorkingDirectory = Split-Path -Parent $LauncherPath
     if (Test-Path -LiteralPath $PatchedExe) {
         $shortcut.IconLocation = "$PatchedExe,0"
     }
@@ -256,10 +256,10 @@ function Write-Launcher {
         [Parameter(Mandatory)][string]$PatchedExe,
         [Parameter(Mandatory)][string]$PatchedAsar,
         [Parameter(Mandatory)][string]$PendingAsar,
+        [Parameter(Mandatory)][string]$LauncherDir,
         [string]$StateRepairScript = '',
         [bool]$PromoteDefaultShortcuts = $false
     )
-    $desktop = [Environment]::GetFolderPath('Desktop')
     $launcherNames = @('start-codex-patched-history.cmd', 'start-codex-patched-sidebar-1000.cmd')
     $stateRepairLine = ''
     $stateRepairBlock = ''
@@ -314,12 +314,13 @@ echo Starting patched Codex...
 start "" "%PATCHED_EXE%"
 exit /b 0
 "@
+    New-Item -ItemType Directory -Path $LauncherDir -Force | Out-Null
     foreach ($name in $launcherNames) {
-        $path = Join-Path $desktop $name
+        $path = Join-Path $LauncherDir $name
         Set-Content -LiteralPath $path -Value $content -Encoding ASCII
         Write-Host "Launcher written: $path"
     }
-    Write-LauncherShortcuts -LauncherPath (Join-Path $desktop 'start-codex-patched-history.cmd') -PatchedExe $PatchedExe -PromoteDefault $PromoteDefaultShortcuts
+    Write-LauncherShortcuts -LauncherPath (Join-Path $LauncherDir 'start-codex-patched-history.cmd') -PatchedExe $PatchedExe -PromoteDefault $PromoteDefaultShortcuts
 }
 
 function Invoke-Repair {
@@ -353,7 +354,7 @@ function Invoke-Repair {
     & $asarCmd pack $unpacked $pendingAsar
     $stateRepairScript = Join-Path $PSScriptRoot 'repair_codex_global_visible_state.ps1'
     if (-not (Test-Path -LiteralPath $stateRepairScript)) { $stateRepairScript = '' }
-    Write-Launcher -PatchedExe $patchedExe -PatchedAsar $asar -PendingAsar $pendingAsar -StateRepairScript $stateRepairScript -PromoteDefaultShortcuts $PromoteLauncherShortcuts
+    Write-Launcher -PatchedExe $patchedExe -PatchedAsar $asar -PendingAsar $pendingAsar -LauncherDir $WorkRoot -StateRepairScript $stateRepairScript -PromoteDefaultShortcuts $PromoteLauncherShortcuts
 
     $serverFile = Get-ChildItem -LiteralPath $assets -Filter 'app-server-manager-signals-*.js' |
         Where-Object { (Get-Content -Raw -LiteralPath $_.FullName).Contains('async runRecentConversationRefresh') } |
@@ -371,7 +372,7 @@ function Invoke-Repair {
     Write-Host "Patched root: $patchedRoot"
 
     if ($ApplyNow) {
-        $launcher = Join-Path ([Environment]::GetFolderPath('Desktop')) 'start-codex-patched-history.cmd'
+        $launcher = Join-Path $WorkRoot 'start-codex-patched-history.cmd'
         Start-Process -FilePath $launcher -WindowStyle Hidden
     }
 }

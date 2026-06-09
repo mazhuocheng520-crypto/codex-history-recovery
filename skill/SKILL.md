@@ -81,9 +81,10 @@ patched 版路径应该在：
 
 如果当前进程是官方版，说明用户从原桌面快捷方式、开始菜单、任务栏固定图标或托盘入口打开了官方 Codex。直接让用户改用生成的启动器，不要从头排查数据库。
 
-Windows 脚本会生成：
+Windows 脚本会在修复目录生成启动器，并在桌面生成快捷方式：
 
 ```text
+%USERPROFILE%\Documents\Codex\history-audit\start-codex-patched-history.cmd
 Codex 历史修复版.lnk
 ```
 
@@ -128,8 +129,8 @@ this.listAllThreads({modelProviders:null,archived:!1})
 
 - 输出包含 `full-refresh-patch-ok`
 - patched app 的 `app\resources` 下存在 `app.asar.patched`
-- 桌面启动器指向 patched `Codex.exe`
-- 桌面启动器包含 `Repairing Codex global visible thread state`
+- 修复目录里的启动器指向 patched `Codex.exe`
+- 修复目录里的启动器包含 `Repairing Codex global visible thread state`
 - Windows 上存在 `Codex 历史修复版.lnk`
 
 用户通过启动器重启后，再确认项目文件夹和普通对话是否显示完整历史。

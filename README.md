@@ -93,6 +93,12 @@ C:\Program Files\WindowsApps\OpenAI.Codex_<version>_x64__...\app\Codex.exe
 - `start-codex-patched-history.cmd`
 - `Codex 历史修复版.lnk`
 
+实际启动器放在修复目录里，桌面只保留快捷方式：
+
+```text
+%USERPROFILE%\Documents\Codex\history-audit\start-codex-patched-history.cmd
+```
+
 如果你经常点原来的 `Codex` 图标，可以运行：
 
 ```powershell
@@ -130,10 +136,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\repair_codex_histo
 脚本会生成：
 
 ```text
-%USERPROFILE%\Desktop\start-codex-patched-history.cmd
+%USERPROFILE%\Documents\Codex\history-audit\start-codex-patched-history.cmd
 ```
 
-运行它会关闭当前 Codex、修复可见会话分区、应用 pending `app.asar.patched`，再启动 patched Codex。
+运行它会关闭当前 Codex、修复可见会话分区、应用 pending `app.asar.patched`，再启动 patched Codex。桌面只需要保留 `Codex 历史修复版.lnk` 快捷方式。
 
 ## macOS 命令
 
