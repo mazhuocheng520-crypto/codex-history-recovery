@@ -289,60 +289,122 @@ function Write-Launcher {
         [bool]$PromoteDefaultShortcuts = $false
     )
     $launcherNames = @('start-codex-patched-history.cmd', 'start-codex-patched-sidebar-1000.cmd')
-    $stateRepairLine = ''
-    $stateRepairBlock = ''
-    if ($StateRepairScript.Trim().Length -gt 0 -and (Test-Path -LiteralPath $StateRepairScript)) {
-        $stateRepairLine = "set ""STATE_REPAIR=$StateRepairScript"""
-        $stateRepairBlock = @"
+    $launcherPs1 = Join-Path $LauncherDir 'start-codex-patched-history.ps1'
+    $logPath = Join-Path $LauncherDir 'last-history-launch.log'
+    $ps1Template = @'
+[CmdletBinding()]
+param()
 
-if exist "%STATE_REPAIR%" (
-  echo Repairing Codex global visible thread state...
-  powershell -NoProfile -ExecutionPolicy Bypass -File "%STATE_REPAIR%"
-  if errorlevel 1 (
-    echo Failed to repair Codex global visible thread state.
-    pause
-    exit /b 1
-  )
-)
-"@
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
+$PatchedExe = '__PATCHED_EXE__'
+$PatchedAsar = '__PATCHED_ASAR__'
+$NextAsar = '__PENDING_ASAR__'
+$StateRepair = '__STATE_REPAIR__'
+$LogPath = '__LAUNCH_LOG__'
+
+function Write-LaunchLog {
+    param([Parameter(Mandatory)][string]$Message)
+    $line = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') $Message"
+    $line | Tee-Object -FilePath $LogPath -Append
+}
+
+function Get-CodexProcesses {
+    Get-CimInstance Win32_Process |
+        Where-Object { $_.Name -in @('Codex.exe', 'codex.exe') } |
+        Select-Object ProcessId, Name, ExecutablePath, CommandLine, CreationDate
+}
+
+if (Test-Path -LiteralPath $LogPath) {
+    Remove-Item -LiteralPath $LogPath -Force
+}
+
+Write-LaunchLog 'Starting patched Codex history launcher.'
+
+if (-not (Test-Path -LiteralPath $PatchedExe)) {
+    throw "Patched Codex.exe not found: $PatchedExe"
+}
+
+$before = @(Get-CodexProcesses)
+Write-LaunchLog "Codex processes before close: $($before.Count)"
+foreach ($proc in $before) {
+    Write-LaunchLog "Closing pid=$($proc.ProcessId) name=$($proc.Name) exe=$($proc.ExecutablePath)"
+    Stop-Process -Id $proc.ProcessId -Force -ErrorAction SilentlyContinue
+}
+
+Start-Sleep -Seconds 3
+
+$left = @(Get-CodexProcesses)
+if ($left.Count -gt 0) {
+    foreach ($proc in $left) {
+        Write-LaunchLog "Retry taskkill pid=$($proc.ProcessId) name=$($proc.Name)"
+        & taskkill.exe /PID $proc.ProcessId /T /F | ForEach-Object { Write-LaunchLog $_ }
     }
+    Start-Sleep -Seconds 2
+}
+
+$left = @(Get-CodexProcesses)
+if ($left.Count -gt 0) {
+    foreach ($proc in $left) {
+        Write-LaunchLog "Still running pid=$($proc.ProcessId) name=$($proc.Name) exe=$($proc.ExecutablePath)"
+    }
+    throw "Codex processes are still running; cannot safely repair state_5.sqlite."
+}
+
+if ($StateRepair.Trim().Length -gt 0 -and (Test-Path -LiteralPath $StateRepair)) {
+    Write-LaunchLog 'Repairing Codex global visible thread state and SQLite integrity.'
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $StateRepair *>&1 |
+        ForEach-Object { Write-LaunchLog $_.ToString() }
+    if ($LASTEXITCODE -ne 0) {
+        throw "State repair failed with exit code $LASTEXITCODE"
+    }
+}
+
+if (Test-Path -LiteralPath $NextAsar) {
+    Write-LaunchLog 'Applying pending app.asar patch.'
+    $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+    Copy-Item -LiteralPath $PatchedAsar -Destination ($PatchedAsar + '.backup-before-history-' + $stamp) -Force
+    Move-Item -LiteralPath $NextAsar -Destination $PatchedAsar -Force
+}
+
+Write-LaunchLog "Starting patched Codex: $PatchedExe"
+Start-Process -FilePath $PatchedExe -WorkingDirectory (Split-Path -Parent $PatchedExe)
+Write-LaunchLog 'Done.'
+'@
+    $ps1Content = $ps1Template.
+        Replace('__PATCHED_EXE__', $PatchedExe.Replace("'", "''")).
+        Replace('__PATCHED_ASAR__', $PatchedAsar.Replace("'", "''")).
+        Replace('__PENDING_ASAR__', $PendingAsar.Replace("'", "''")).
+        Replace('__STATE_REPAIR__', $StateRepairScript.Replace("'", "''")).
+        Replace('__LAUNCH_LOG__', $logPath.Replace("'", "''"))
+
     $content = @"
 @echo off
 setlocal
+set "LAUNCHER_PS1=$launcherPs1"
 
-set "PATCHED_EXE=$PatchedExe"
-set "PATCHED_ASAR=$PatchedAsar"
-set "NEXT_ASAR=$PendingAsar"
-$stateRepairLine
-
-if not exist "%PATCHED_EXE%" (
-  echo Patched Codex.exe not found:
-  echo %PATCHED_EXE%
+if not exist "%LAUNCHER_PS1%" (
+  echo Launcher PowerShell script not found:
+  echo %LAUNCHER_PS1%
   pause
   exit /b 1
 )
 
-echo Closing existing Codex processes...
-taskkill /IM Codex.exe /F >nul 2>nul
-taskkill /IM codex.exe /F >nul 2>nul
-timeout /t 3 /nobreak >nul
-$stateRepairBlock
-
-if exist "%NEXT_ASAR%" (
-  echo Applying pending Codex history sidebar patch...
-  powershell -NoProfile -ExecutionPolicy Bypass -Command "`$asar='%PATCHED_ASAR%'; `$next='%NEXT_ASAR%'; `$stamp=Get-Date -Format 'yyyyMMdd-HHmmss'; Copy-Item -LiteralPath `$asar -Destination (`$asar + '.backup-before-history-' + `$stamp) -Force; Move-Item -LiteralPath `$next -Destination `$asar -Force"
-  if errorlevel 1 (
-    echo Failed to apply pending app.asar update.
-    pause
-    exit /b 1
-  )
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%LAUNCHER_PS1%"
+if errorlevel 1 (
+  echo.
+  echo Codex history launcher failed. See:
+  echo $logPath
+  pause
+  exit /b 1
 )
 
-echo Starting patched Codex...
-start "" "%PATCHED_EXE%"
 exit /b 0
 "@
     New-Item -ItemType Directory -Path $LauncherDir -Force | Out-Null
+    Set-Content -LiteralPath $launcherPs1 -Value $ps1Content -Encoding ASCII
+    Write-Host "Launcher script written: $launcherPs1"
     foreach ($name in $launcherNames) {
         $path = Join-Path $LauncherDir $name
         Set-Content -LiteralPath $path -Value $content -Encoding ASCII
