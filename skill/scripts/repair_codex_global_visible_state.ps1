@@ -28,6 +28,7 @@ home = os.path.expanduser("~")
 db_path = os.path.join(home, ".codex", "state_5.sqlite")
 state_path = os.path.join(home, ".codex", ".codex-global-state.json")
 backup_root = os.path.join(home, ".codex", "backups_state", "visible-gap-project-assignments")
+sqlite_backup_root = os.path.join(home, ".codex", "backups_state", "sqlite-integrity")
 default_chat_root = os.path.normcase(os.path.join(home, "Documents", "Codex"))
 
 def strip_extended(path):
@@ -47,6 +48,103 @@ if not os.path.exists(db_path):
     raise SystemExit("state_5.sqlite not found: " + db_path)
 if not os.path.exists(state_path):
     raise SystemExit(".codex-global-state.json not found: " + state_path)
+
+def db_sidecars(path):
+    return [path, path + "-wal", path + "-shm"]
+
+def backup_sqlite(reason):
+    stamp = datetime.datetime.now().strftime("%Y%m%dT%H%M%S")
+    backup_dir = os.path.join(sqlite_backup_root, f"{stamp}-{reason}")
+    os.makedirs(backup_dir, exist_ok=True)
+    for src in db_sidecars(db_path):
+        if os.path.exists(src):
+            shutil.copy2(src, os.path.join(backup_dir, os.path.basename(src)))
+    return backup_dir
+
+def integrity_check(path):
+    con = sqlite3.connect(path)
+    try:
+        return [row[0] for row in con.execute("pragma integrity_check")]
+    finally:
+        con.close()
+
+def rebuild_sqlite_from_dump(backup_dir):
+    stamp = datetime.datetime.now().strftime("%Y%m%dT%H%M%S")
+    dump_path = os.path.join(backup_dir, "state_5.dump.sql")
+    rebuilt_path = db_path + f".rebuilt-{stamp}"
+
+    src = sqlite3.connect(db_path)
+    try:
+        with open(dump_path, "w", encoding="utf-8", newline="\n") as f:
+            for line in src.iterdump():
+                f.write(line)
+                f.write("\n")
+    finally:
+        src.close()
+
+    if os.path.exists(rebuilt_path):
+        os.remove(rebuilt_path)
+    dst = sqlite3.connect(rebuilt_path)
+    try:
+        with open(dump_path, "r", encoding="utf-8") as f:
+            dst.executescript(f.read())
+        dst.execute("pragma wal_checkpoint(truncate)")
+        dst.commit()
+        status = [row[0] for row in dst.execute("pragma integrity_check")]
+    finally:
+        dst.close()
+
+    if status != ["ok"]:
+        try:
+            os.remove(rebuilt_path)
+        except OSError:
+            pass
+        raise SystemExit("sqlite-integrity-rebuild-failed: " + " | ".join(status))
+
+    for src_path in db_sidecars(db_path):
+        if os.path.exists(src_path):
+            dst_path = os.path.join(backup_dir, os.path.basename(src_path) + ".before-rebuild")
+            os.replace(src_path, dst_path)
+    os.replace(rebuilt_path, db_path)
+    return status
+
+def repair_sqlite_integrity_if_needed():
+    status = integrity_check(db_path)
+    if status == ["ok"]:
+        print("sqlite-integrity-ok")
+        return
+
+    backup_dir = backup_sqlite("before-repair")
+    print("sqlite-integrity-repair-needed backup=" + backup_dir)
+    print("sqlite-integrity-before=" + " | ".join(status[:5]))
+
+    try:
+        con = sqlite3.connect(db_path, timeout=15)
+        try:
+            con.execute("pragma busy_timeout=15000")
+            con.execute("pragma wal_checkpoint(truncate)")
+            con.execute("reindex")
+            con.execute("vacuum")
+            con.execute("analyze")
+            con.commit()
+        finally:
+            con.close()
+    except sqlite3.Error as exc:
+        print("sqlite-integrity-inplace-repair-error=" + str(exc))
+
+    status = integrity_check(db_path)
+    if status == ["ok"]:
+        print("sqlite-integrity-repaired backup=" + backup_dir)
+        return
+
+    print("sqlite-integrity-inplace-still-bad=" + " | ".join(status[:5]))
+    rebuild_sqlite_from_dump(backup_dir)
+    status = integrity_check(db_path)
+    if status != ["ok"]:
+        raise SystemExit("sqlite-integrity-still-bad: " + " | ".join(status))
+    print("sqlite-integrity-rebuilt backup=" + backup_dir)
+
+repair_sqlite_integrity_if_needed()
 
 con = sqlite3.connect(db_path)
 con.row_factory = sqlite3.Row

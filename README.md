@@ -20,6 +20,7 @@ https://github.com/mazhuocheng520-crypto/codex-desktop-history-recovery
 - 项目文件夹里的对话数量明显少于实际数量
 - 线程管理里能看到总线程数，但左侧侧栏不显示
 - 本地 `state_5.sqlite` 里有线程，但项目组或普通对话里看不到
+- `codex doctor` 报 `state_5.sqlite` integrity check failed、索引计数不一致或 freelist 异常
 - Codex 更新后，之前修好的历史侧栏又失效
 - 修好后重启又变回去，因为打开了官方版快捷方式，而不是补丁版启动器
 
@@ -179,12 +180,12 @@ bash ./scripts/repair_codex_history_sidebar_macos.sh --codex-app "/Applications/
 
 - 上传你的历史对话
 - 删除你的 Codex 历史数据库
-- 重写 `%USERPROFILE%\.codex\state_5.sqlite`
+- 无备份地重写 `%USERPROFILE%\.codex\state_5.sqlite`
 - 无备份地清空 `%USERPROFILE%\.codex\.codex-global-state.json`
 - 分发 Codex 官方应用文件
 - 分发 patched `app.asar`
 
-它做的是本地复制、本地解包、本地打补丁、本地重新打包。
+它做的是本地复制、本地解包、本地打补丁、本地重新打包。如果 `state_5.sqlite` 自身完整性失败，启动器会在关闭 Codex 后先备份数据库，再优先用 `REINDEX` / `VACUUM` 修复 SQLite 索引和 freelist；只有原地修复仍失败时，才从 dump 重建数据库。
 
 ## Skill 用法
 
@@ -217,6 +218,7 @@ Common symptoms:
 - project folders show too few threads
 - sidebar only shows recent conversations
 - local `state_5.sqlite` data is intact
+- `codex doctor` reports `state_5.sqlite` integrity/index/freelist errors
 - the fix worked once but disappeared after launching the official app shortcut
 
 The scripts copy the local Codex Desktop app and patch only the copied bundle. The core change replaces a paginated recent-thread refresh with a full active-thread refresh:
