@@ -88,7 +88,7 @@ Windows 脚本会在修复目录生成启动器，并在桌面生成快捷方式
 Codex 历史修复版.lnk
 ```
 
-如果用户希望桌面和开始菜单里的默认 `Codex` 也指向修复启动器，在确认后运行：
+如果用户希望开始菜单里的默认 `Codex` 也指向修复启动器，在确认后运行。桌面只保留 `Codex 历史修复版.lnk`：
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\skills\codex-history-recovery\scripts\repair_codex_history_sidebar.ps1" -PromoteLauncherShortcuts

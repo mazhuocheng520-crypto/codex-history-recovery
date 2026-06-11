@@ -105,7 +105,7 @@ C:\Program Files\WindowsApps\OpenAI.Codex_<version>_x64__...\app\Codex.exe
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\repair_codex_history_sidebar.ps1 -PromoteLauncherShortcuts
 ```
 
-这个参数会先备份官方快捷方式，再把桌面和开始菜单里的 `Codex` 指向修复启动器。任务栏固定图标如果仍打开官方版，需要取消固定旧图标，再从 `Codex 历史修复版` 重新固定。
+这个参数会先备份官方快捷方式，再把开始菜单里的 `Codex` 指向修复启动器；桌面只保留 `Codex 历史修复版.lnk`。任务栏固定图标如果仍打开官方版，需要取消固定旧图标，再从 `Codex 历史修复版` 重新固定。
 
 ## Windows 命令
 

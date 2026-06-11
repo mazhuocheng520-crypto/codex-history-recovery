@@ -168,6 +168,11 @@ function Patch-AppServerManager {
         $pattern = 'let ([A-Za-z_$][A-Za-z0-9_$]*)=await this\.listRecentThreads\(\{limit:[^}]+,cursor:null\}\);this\.fetchedRecentConversations=!0,this\.nextRecentConversationCursor=\1\.nextCursor;'
         $replacement = 'let $1={data:await this.listAllThreads({modelProviders:null,archived:!1}),nextCursor:null};this.fetchedRecentConversations=!0,this.nextRecentConversationCursor=null;'
         $updated = [regex]::Replace($text, $pattern, $replacement, 1)
+        if ($updated -eq $text) {
+            $historyLimitPattern = 'let ([A-Za-z_$][A-Za-z0-9_$]*)=this\.params\.getHistoryLimit\?\.\(\)\?\?50,([A-Za-z_$][A-Za-z0-9_$]*)=\1>50,([A-Za-z_$][A-Za-z0-9_$]*)=\2\?\1:50\*this\.recentConversationPageCount,([A-Za-z_$][A-Za-z0-9_$]*)=performance\.now\(\),([A-Za-z_$][A-Za-z0-9_$]*)=await this\.listRecentThreads\(\{limit:\3,cursor:null,useStateDbOnly:\2\}\);'
+            $historyLimitReplacement = 'let $1=this.params.getHistoryLimit?.()??50,$2=!0,$3=$1,$4=performance.now(),$5={data:await this.listAllThreads({modelProviders:null,archived:!1}),nextCursor:null};'
+            $updated = [regex]::Replace($text, $historyLimitPattern, $historyLimitReplacement, 1)
+        }
         if ($updated -eq $text -and -not $text.Contains('listAllThreads({modelProviders:null,archived:!1})')) {
             throw "runRecentConversationRefresh patch pattern was not found."
         }
@@ -245,6 +250,29 @@ function Write-LauncherShortcuts {
         if ($PromoteDefault) {
             Write-Shortcut -Path (Join-Path $desktop 'Codex.lnk') -LauncherPath $LauncherPath -PatchedExe $PatchedExe -BackupPath (Join-Path $desktop 'Codex 官方版.lnk')
             Write-Shortcut -Path (Join-Path $startMenu 'Codex.lnk') -LauncherPath $LauncherPath -PatchedExe $PatchedExe -BackupPath (Join-Path $startMenu 'Codex 官方版.lnk')
+        }
+    } catch {
+        Write-Host "Shortcut creation skipped: $($_.Exception.Message)"
+    }
+}
+
+function Write-LauncherShortcuts {
+    param(
+        [Parameter(Mandatory)][string]$LauncherPath,
+        [Parameter(Mandatory)][string]$PatchedExe,
+        [bool]$PromoteDefault = $false
+    )
+    try {
+        $desktop = [Environment]::GetFolderPath('Desktop')
+        $startMenu = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs'
+        $historyShortcutName = 'Codex ' + [string][char]0x5386 + [string][char]0x53F2 + [string][char]0x4FEE + [string][char]0x590D + [string][char]0x7248 + '.lnk'
+        $officialShortcutName = 'Codex ' + [string][char]0x5B98 + [string][char]0x65B9 + [string][char]0x7248 + '.lnk'
+
+        Write-Shortcut -Path (Join-Path $desktop $historyShortcutName) -LauncherPath $LauncherPath -PatchedExe $PatchedExe
+        Write-Shortcut -Path (Join-Path $startMenu $historyShortcutName) -LauncherPath $LauncherPath -PatchedExe $PatchedExe
+
+        if ($PromoteDefault) {
+            Write-Shortcut -Path (Join-Path $startMenu 'Codex.lnk') -LauncherPath $LauncherPath -PatchedExe $PatchedExe -BackupPath (Join-Path $startMenu $officialShortcutName)
         }
     } catch {
         Write-Host "Shortcut creation skipped: $($_.Exception.Message)"
@@ -360,7 +388,7 @@ function Invoke-Repair {
         Where-Object { (Get-Content -Raw -LiteralPath $_.FullName).Contains('async runRecentConversationRefresh') } |
         Select-Object -First 1
     $serverText = Get-Content -Raw -LiteralPath $serverFile.FullName
-    if ($serverText.Contains('let t={data:await this.listAllThreads({modelProviders:null,archived:!1}),nextCursor:null};this.fetchedRecentConversations=!0,this.nextRecentConversationCursor=null;')) {
+    if ($serverText.Contains('async runRecentConversationRefresh') -and $serverText.Contains('listAllThreads({modelProviders:null,archived:!1})')) {
         Write-Host 'full-refresh-patch-ok'
     } else {
         throw 'full-refresh-patch-missing'
